@@ -18,7 +18,7 @@ class LossComputer:
         self.n_groups = dataset.n_groups
         self.group_counts = dataset.group_counts().cuda()
         self.group_frac = self.group_counts/self.group_counts.sum()
-        self.group_str = dataset.group_str
+        # self.group_str = dataset.group_str
 
         if adj is not None:
             self.adj = torch.from_numpy(adj).float().cuda()
@@ -185,7 +185,7 @@ class LossComputer:
         logger.write(f'Average acc: {self.avg_acc.item():.3f}  \n')
         for group_idx in range(self.n_groups):
             logger.write(
-                f'  {self.group_str(group_idx)}  '
+                # f'  {self.group_str(group_idx)}  '
                 f'[n = {int(self.processed_data_counts[group_idx])}]:\t'
                 f'loss = {self.avg_group_loss[group_idx]:.3f}  '
                 f'exp loss = {self.exp_avg_loss[group_idx]:.3f}  '

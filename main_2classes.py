@@ -8,18 +8,21 @@ import torchvision
 from models import model_attributes
 from data.data import dataset_attributes, shift_types, prepare_data, log_data
 from utils import set_seed, Logger, CSVBatchLogger, log_args
-from train import train
+
+from train_2classes import train
+from data.dataset_places_2classes import PlacesDataset
 
 
 def main():
     parser = argparse.ArgumentParser()
 
     # Settings
-    parser.add_argument('-d', '--dataset', choices=dataset_attributes.keys(), required=True)
-    parser.add_argument('-s', '--shift_type', choices=shift_types, required=True)
+    parser.add_argument('--train_npy', required=True)
+    parser.add_argument('--test_npy', required=False, default=None)
+    # parser.add_argument('-s', '--shift_type', choices=shift_types, required=True)
     # Confounders
-    parser.add_argument('-t', '--target_name')
-    parser.add_argument('-c', '--confounder_names', nargs='+')
+    # parser.add_argument('-t', '--target_name')
+    # parser.add_argument('-c', '--confounder_names', nargs='+')
     # Resume?
     parser.add_argument('--resume', default=False, action='store_true')
     # Label shifts
@@ -49,31 +52,27 @@ def main():
     parser.add_argument('--train_from_scratch', action='store_true', default=False)
 
     # Optimization
-    parser.add_argument('--n_epochs', type=int, default=4)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--n_epochs', type=int, default=50)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--scheduler', action='store_true', default=False)
     parser.add_argument('--weight_decay', type=float, default=5e-5)
     parser.add_argument('--gamma', type=float, default=0.1)
     parser.add_argument('--minimum_variational_weight', type=float, default=0)
     # Misc
-    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--show_progress', default=False, action='store_true')
     parser.add_argument('--log_dir', default='./logs')
-    parser.add_argument('--log_every', default=50, type=int)
-    parser.add_argument('--save_step', type=int, default=10)
+    parser.add_argument('--log_every', default=10, type=int)
+    parser.add_argument('--save_step', type=int, default=5)
     parser.add_argument('--save_best', action='store_true', default=False)
     parser.add_argument('--save_last', action='store_true', default=False)
 
     args = parser.parse_args()
-    check_args(args)
-
-    # BERT-specific configs copied over from run_glue.py
-    if args.model == 'bert':
-        args.max_grad_norm = 1.0
-        args.adam_epsilon = 1e-8
-        args.warmup_steps = 0
-
+    # check_args(args)
+    print()
+    print(args)
+    print()
     if os.path.exists(args.log_dir) and args.resume:
         resume=True
         mode='a'
@@ -81,6 +80,9 @@ def main():
         resume=False
         mode='w'
 
+    os.makedirs(args.log_dir, exist_ok=True)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print('Using PyTorch version:', torch.__version__, ' Device:', device)
     ## Initialize logs
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
@@ -88,30 +90,35 @@ def main():
     logger = Logger(os.path.join(args.log_dir, 'log.txt'), mode)
     # Record args
     log_args(args, logger)
-
     set_seed(args.seed)
 
     # Data
     # Test data for label_shift_step is not implemented yet
     test_data = None
     test_loader = None
-    if args.shift_type == 'confounder':
-        train_data, val_data, test_data = prepare_data(args, train=True)
-        print(train_data)
-        print(type(train_data))
-        for i in train_data:
-            print(i)
-            break
-        print("------------------------")
-        print("finished prepare_data")
-    elif args.shift_type == 'label_shift_step':
-        train_data, val_data = prepare_data(args, train=True)
+    
+    train_data = PlacesDataset(args.train_npy, mode="train", perc_train=0.8)
+    val_data = PlacesDataset(args.train_npy, mode="validation", perc_train=0.8)
+    if args.test_npy:
+        test_data = PlacesDataset(args.test_npy, mode='test')
+    
+    # if args.shift_type == 'confounder':
+    #     train_data, val_data, test_data = prepare_data(args, train=True)
+    #     print(train_data)
+    #     print(type(train_data))
+    #     for i in train_data:
+    #         print(i)
+    #         break
+    #     print("------------------------")
+    #     print("finished prepare_data")
+    # elif args.shift_type == 'label_shift_step':
+    #     train_data, val_data = prepare_data(args, train=True)
 
-    loader_kwargs = {'batch_size':args.batch_size, 'num_workers':4, 'pin_memory':True}
-    train_loader = train_data.get_loader(train=True, reweight_groups=args.reweight_groups, **loader_kwargs)
-    val_loader = val_data.get_loader(train=False, reweight_groups=None, **loader_kwargs)
-    if test_data is not None:
-        test_loader = test_data.get_loader(train=False, reweight_groups=None, **loader_kwargs)
+    loader_kwargs = {'batch_size':args.batch_size, 'num_workers': 4, 'pin_memory':True}
+    train_loader = train_data.get_loader(True, args.batch_size, 4)
+    val_loader = val_data.get_loader(False, args.batch_size, 4)
+    if args.test_npy:
+        test_loader = test_data.get_loader(False, args.batch_size, 4)
 
     data = {}
     data['train_loader'] = train_loader
@@ -122,7 +129,7 @@ def main():
     data['test_data'] = test_data
     n_classes = train_data.n_classes
 
-    log_data(data, logger)
+    # log_data(data, logger)
 
     ## Initialize model
     pretrained = not args.train_from_scratch
@@ -136,7 +143,7 @@ def main():
         model = nn.Linear(d, n_classes)
         model.has_aux_logits = False
     elif args.model == 'resnet50':
-        model = torchvision.models.resnet50(pretrained=pretrained)
+        model = torchvision.models.resnet50(weights='ResNet50_Weights.IMAGENET1K_V1')
         d = model.fc.in_features
         model.fc = nn.Linear(d, n_classes)
     elif args.model == 'resnet34':
@@ -147,21 +154,6 @@ def main():
         model = torchvision.models.wide_resnet50_2(pretrained=pretrained)
         d = model.fc.in_features
         model.fc = nn.Linear(d, n_classes)
-    elif args.model == 'bert':
-        assert args.dataset == 'MultiNLI'
-
-        from pytorch_transformers import BertConfig, BertForSequenceClassification
-        config_class = BertConfig
-        model_class = BertForSequenceClassification
-
-        config = config_class.from_pretrained(
-            'bert-base-uncased',
-            num_labels=3,
-            finetuning_task='mnli')
-        model = model_class.from_pretrained(
-            'bert-base-uncased',
-            from_tf=False,
-            config=config)
     else:
         raise ValueError('Model not recognized.')
 
@@ -192,20 +184,19 @@ def main():
     val_csv_logger =  CSVBatchLogger(os.path.join(args.log_dir, 'val.csv'), train_data.n_groups, mode=mode)
     test_csv_logger =  CSVBatchLogger(os.path.join(args.log_dir, 'test.csv'), train_data.n_groups, mode=mode)
 
-    train(model, criterion, data, logger, train_csv_logger, val_csv_logger, test_csv_logger, args, epoch_offset=epoch_offset)
+    train(model, criterion, data, device, logger, train_csv_logger, val_csv_logger, test_csv_logger, args, epoch_offset=epoch_offset)
 
     train_csv_logger.close()
     val_csv_logger.close()
     test_csv_logger.close()
 
-def check_args(args):
-    if args.shift_type == 'confounder':
-        assert args.confounder_names
-        assert args.target_name
-    elif args.shift_type.startswith('label_shift'):
-        assert args.minority_fraction
-        assert args.imbalance_ratio
-
+# def check_args(args):
+#     if args.shift_type == 'confounder':
+#         assert args.confounder_names
+#         assert args.target_name
+#     elif args.shift_type.startswith('label_shift'):
+#         assert args.minority_fraction
+#         assert args.imbalance_ratio
 
 
 if __name__=='__main__':
