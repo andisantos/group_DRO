@@ -1,4 +1,4 @@
-import os, csv
+import os
 import argparse
 import pandas as pd
 import torch
@@ -63,7 +63,7 @@ def main():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--show_progress', default=False, action='store_true')
     parser.add_argument('--log_dir', default='./logs')
-    parser.add_argument('--log_every', default=10, type=int)
+    parser.add_argument('--log_every', default=5, type=int)
     parser.add_argument('--save_step', type=int, default=5)
     parser.add_argument('--save_best', action='store_true', default=False)
     parser.add_argument('--save_last', action='store_true', default=False)
@@ -143,7 +143,7 @@ def main():
         model = nn.Linear(d, n_classes)
         model.has_aux_logits = False
     elif args.model == 'resnet50':
-        model = torchvision.models.resnet50(weights='ResNet50_Weights.IMAGENET1K_V1')
+        model = torchvision.models.resnet50(pretrained=pretrained)
         d = model.fc.in_features
         model.fc = nn.Linear(d, n_classes)
     elif args.model == 'resnet34':
@@ -158,7 +158,7 @@ def main():
         raise ValueError('Model not recognized.')
 
     logger.flush()
-    print("finishe initialize model")
+    print("finished initialize model")
     ## Define the objective
     if args.hinge:
         assert args.dataset in ['CelebA', 'CUB'] # Only supports binary

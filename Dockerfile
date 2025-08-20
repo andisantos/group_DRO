@@ -16,6 +16,6 @@ COPY . /src
 WORKDIR /src
 
 #RUN conda install -y matplotlib=3.0.3 numpy=1.16.2 pillow=5.4.1 pandas tqdm=4.32.2 -c conda-forge
-RUN pip3 install wilds pytorch_transformers jupyter 
+RUN pip3 install wilds pytorch_transformers jupyter pandas numpy torchvision  
 #RUN pip install wilds matplotlib==3.0.3 numpy==1.19.1 pandas pillow==5.4.1
 
