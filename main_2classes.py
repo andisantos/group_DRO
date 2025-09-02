@@ -65,7 +65,7 @@ def main():
     parser.add_argument('--log_dir', default='./logs')
     parser.add_argument('--log_every', default=5, type=int)
     parser.add_argument('--save_step', type=int, default=5)
-    parser.add_argument('--save_best', action='store_true', default=False)
+    parser.add_argument('--save_best', action='store_true', default=True)
     parser.add_argument('--save_last', action='store_true', default=False)
 
     args = parser.parse_args()
